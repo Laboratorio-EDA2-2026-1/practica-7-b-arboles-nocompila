@@ -1,2 +1,204 @@
 Implementa aquí todos los procesos necesarios para la operación de eliminación. 
 Pueden modificar la extensión del documento para que se ajuste al lenguaje de su elección y comentar estas instrucciones.
+---------- CODIGO ----------
+#include <stdio.h>
+#include <stdlib.h>
+
+#define MAX_KEYS     4       //Máximo de claves que caben en un nodo
+#define T 2                  //Grado mínimo del B-árbol
+#define MAX_CHILDREN (MAX_KEYS + 1)
+#define MIN_KEYS (T - 1)
+// Estructura de nodo del B-árbol
+typedef struct BTreeNode {
+    int n;                             //Claves que tiene el nodo ahorita
+    int clave[MAX_KEYS];               //Claves que guarda el nodo
+    long ref[MAX_KEYS];                //Referencia al dato
+    int esHoja;                        //1 si es hoja, 0 si es nodo interno
+    struct BTreeNode *hijo[MAX_CHILDREN]; //Punteros a los hijos
+} BTreeNode;
+// --- FUNCIONES BÁSICAS ---
+//Crea un nodo nuevo
+BTreeNode *crearNodo(int esHoja) {
+    int i;
+    BTreeNode *n = (BTreeNode *) malloc(sizeof(BTreeNode));
+    //Si no hay memoria
+    if (n == NULL) {
+        fprintf(stderr, "Error: Memoria insuficiente\n");
+        exit(1);
+    }
+    n->n = 0;
+    n->esHoja = esHoja;
+    //Limpia las claves y referencias
+    for (i = 0; i < MAX_KEYS; i++) {
+        n->clave[i] = 0;
+        n->ref[i] = -1;
+    }
+    //Inicializa a los hijos en NULL
+    for (i = 0; i < MAX_CHILDREN; i++) {
+        n->hijo[i] = NULL;
+    }
+    return n;
+}
+//Libera la memoria de todo el árbol
+void liberarArbol(BTreeNode *x) {
+    int i;
+    if (x == NULL) return;
+    //Si no es hoja, primero libera a los hijos
+    if (!x->esHoja) {
+        for (i = 0; i <= x->n; i++) {
+            liberarArbol(x->hijo[i]);
+        }
+    }
+    //Libera el nodo actual
+    free(x);
+}
+
+
+// --- DECLARACION DE FUNCIONES ---
+int btree_buscar(BTreeNode *x, int k, BTreeNode **outNodo, int *outPos);
+int btree_contiene(BTreeNode *raiz, int k);
+void eliminarClaveDeNodo(BTreeNode *x, int i);
+void btree_eliminar_rec(BTreeNode **raiz, BTreeNode *x, int k);
+void btree_eliminar(BTreeNode **raiz, int k);
+// --- FUNCIÓN PARA MOSTRAR EL ÁRBOL ---
+//Imprime el árbol por niveles
+void imprimirArbol(BTreeNode *x, int nivel) {
+    int i;
+    if (x != NULL) {
+        //Imprime espacios según el nivel
+        for (i = 0; i < nivel; i++) printf("   ");
+        printf("| Nivel %d | ", nivel);
+        //Imprime las claves del nodo actual
+        for (i = 0; i < x->n; i++) printf("%d ", x->clave[i]);
+        printf("|\n");
+        // Si no es hoja, baja a imprimir sus hijos
+        if (!x->esHoja) {
+            for (i = 0; i <= x->n; i++) {
+                imprimirArbol(x->hijo[i], nivel + 1);
+            }
+        }
+    }
+}
+// --- FUNCIONES DE BÚSQUEDA ---
+//Busca la clave k en el árbol, regresa 1 si la encuentra, 0 si no
+int btree_buscar(BTreeNode *x, int k, BTreeNode **outNodo, int *outPos) {
+    int i = 0;
+    if (x == NULL) return 0;
+    //Avanza mientras la clave del nodo sea menor que k
+    while (i < x->n && k > x->clave[i]) i++;
+    //Clave encontrada
+    if (i < x->n && k == x->clave[i]) {
+        if (outNodo != NULL) *outNodo = x;
+        if (outPos != NULL) *outPos = i;
+        return 1;
+    }
+    //Se llega a hoja y no se encontro la clave
+    if (x->esHoja) return 0;
+    //Si no es hoja, baja al hijo correspondiente
+    return btree_buscar(x->hijo[i], k, outNodo, outPos);
+}
+//Clave existe o no
+int btree_contiene(BTreeNode *raiz, int k) {
+    return btree_buscar(raiz, k, NULL, NULL);
+}
+// --- FUNCIONES DE ELIMINACIÓN ---
+//Borra una clave dentro de un nodo y recorre las demás hacia la izquierda
+void eliminarClaveDeNodo(BTreeNode *x, int i) {
+    for (int j = i; j < x->n - 1; j++) {
+        x->clave[j] = x->clave[j + 1];
+        x->ref[j] = x->ref[j + 1];
+    }
+    x->n--;
+}
+//Elimina la clave k a partir del nodo x
+void btree_eliminar_rec(BTreeNode **raiz, BTreeNode *x, int k) {
+    int i = 0;
+    // Busca la posición donde debería estar k
+    while (i < x->n && k > x->clave[i]) {
+        i++;
+    }
+    //La clave está en este nodo
+    if (i < x->n && k == x->clave[i]) {
+        if (x->esHoja) {
+            //Si es hoja, simplemente se borra del arreglo de claves
+            eliminarClaveDeNodo(x, i);
+        } else {
+            //Si ya es hoja y no está, ya no existe en el árbol
+            if (x->esHoja) return;
+            btree_eliminar_rec(raiz, x->hijo[i], k);
+        }
+    }
+} 
+//Función para eliminar una clave del árbol
+void btree_eliminar(BTreeNode **raiz, int k) {
+    if (*raiz == NULL) return;
+    //Revisa si la clave esta en el arbol
+    if (!btree_contiene(*raiz, k)) {
+        printf("La clave %d no existe en el arbol\n", k);
+        return;
+    }
+    //Llama a la función recursiva de borrado
+    btree_eliminar_rec(raiz, *raiz, k);
+    //Si la raíz se queda sin claves y tiene hijos, baja un nivel el árbol
+    if (*raiz != NULL && (*raiz)->n == 0 && !(*raiz)->esHoja) {
+        BTreeNode *temp = *raiz;
+        *raiz = (*raiz)->hijo[0];  //La nueva raíz será su primer hijo
+        free(temp);
+    }
+}
+// --- FUNCIÓN PARA ARMAR UN ÁRBOL ---
+//Creamos un B-árbol
+BTreeNode *construirArbolEjemplo(void) {
+    BTreeNode *raiz = crearNodo(0);
+    BTreeNode *hijo0 = crearNodo(1);
+    BTreeNode *hijo1 = crearNodo(1);
+    BTreeNode *hijo2 = crearNodo(1);
+    //Datos de la raíz
+    raiz->n = 2;
+    raiz->clave[0] = 30; raiz->ref[0] = 100;
+    raiz->clave[1] = 60; raiz->ref[1] = 200;
+    raiz->hijo[0] = hijo0;
+    raiz->hijo[1] = hijo1;
+    raiz->hijo[2] = hijo2;
+    //Hijo izquierdo
+    hijo0->n = 2;
+    hijo0->clave[0] = 10; hijo0->ref[0] = 10;
+    hijo0->clave[1] = 20; hijo0->ref[1] = 20;
+    //Hijo del medio
+    hijo1->n = 2;
+    hijo1->clave[0] = 40; hijo1->ref[0] = 40;
+    hijo1->clave[1] = 50; hijo1->ref[1] = 50;
+    //Hijo derecho
+    hijo2->n = 2;
+    hijo2->clave[0] = 70; hijo2->ref[0] = 70;
+    hijo2->clave[1] = 80; hijo2->ref[1] = 80;
+    return raiz;
+}
+//----------- MAIN -----------------------
+int main(void) {
+    BTreeNode *raiz;
+    int claveBorrar;
+    //Arma el árbol base de prueba
+    raiz = construirArbolEjemplo();
+    //Ciclo para que el usuario vaya borrando claves
+    while (1) {
+        printf("==========================================\n");
+        printf(" ESTADO ACTUAL DEL B-ARBOL \n");
+        printf("==========================================\n");
+        imprimirArbol(raiz, 0);
+        printf("==========================================\n");
+        printf("Ingresa la clave a elimiar (0 para salir): ");
+        if (scanf("%d", &claveBorrar) != 1) {
+            printf("\nEntrada invalida\n");
+            //Limpiamos el buffer de entrada
+            while (getchar() != '\n');
+            continue;
+        }
+        if (claveBorrar == 0) break;
+        btree_eliminar(&raiz, claveBorrar);
+        printf("\nIntentando borrar la clave %d...\n\n", claveBorrar);
+    }
+    //Liberamos la memoria
+    liberarArbol(raiz);
+    return 0;
+}
