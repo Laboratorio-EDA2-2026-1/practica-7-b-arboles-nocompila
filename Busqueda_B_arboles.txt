@@ -1,2 +1,158 @@
 Implementa aquí la operación de búsqueda. 
 Pueden modificar la extensión del documento para que se ajuste al lenguaje de su elección y comentar estas instrucciones.
+---------- CODIGO ----------
+#include <stdio.h>
+#include <stdlib.h>
+//Definimos cuántas claves puede tener un nodo como máximo (orden del árbol)
+#define MAX_KEYS      4
+//Un nodo siempre tendrá un hijo más que el número de claves
+#define MAX_CHILDREN (MAX_KEYS+1)
+
+typedef struct BTreeNode {
+    int n;                        //Cuántas claves estamos usando actualmente en este nodo
+    int clave[MAX_KEYS];          //Las claves o datos que guarda el nodo
+    long ref[MAX_KEYS];           //Una referencia asociada a cada clave
+    int esHoja;                   //Si es 1, este nodo es una hoja
+    struct BTreeNode *hijo[MAX_CHILDREN]; //Punteros a los nodos hijos
+} BTreeNode;
+//Función para pedir memoria y preparar un nuevo nodo
+BTreeNode *crearNodo(int esHoja) {
+    int i;
+    //Pedimos espacio en la memoria para el nuevo nodo
+    BTreeNode *n = (BTreeNode *) malloc(sizeof(BTreeNode));
+    if (n == NULL) {
+        fprintf(stderr, "Error: No hay suficiente memoria para crear el nodo\n");
+        exit(1);
+    }
+    n->n = 0;           //Empezamos sin claves
+    n->esHoja = esHoja; //Le decimos si es una hoja o no
+    //Limpiamos los arrays de claves, referencias e hijos
+    for (i = 0; i < MAX_KEYS; i++) {
+        n->clave[i] = 0;
+        n->ref[i] = -1;
+    }
+    for (i = 0; i < MAX_CHILDREN; i++) {
+        n->hijo[i] = NULL;
+    }
+    return n;
+}
+//Buscamos la clave k empezando desde el nodo x
+//Devuelve 1 si la encuentra, y 0 si NO la encuentra
+int btree_buscar(BTreeNode *x, int k, BTreeNode **outNodo, int *outPos) {
+    int i;
+    if (x == NULL) {
+        return 0; //Si llegamos a un nodo vacio, la clave no existe
+    }
+    //Buscamos la primera posición i en este nodo donde la clave actual sea >= 'k'
+    i = 0;
+    while (i < x->n && k > x->clave[i]) {
+        i++;
+    }
+    if (i < x->n && k == x->clave[i]) {
+        //Sí, la clave está en clave[i]
+        if (outNodo != NULL) {
+            *outNodo = x; //Guardamos el nodo donde está
+        }
+        if (outPos != NULL) {
+            *outPos = i; // Guardamos la posición exacta
+        }
+        return 1;
+    }
+    //Si es una hoja y no la encontramos aquí, ya no hay más sitios donde buscar
+    if (x->esHoja) {
+        return 0;
+    }
+    //Si no es una hoja, seguimos buscando en el hijo que corresponde a la posición i
+    return btree_buscar(x->hijo[i], k, outNodo, outPos);
+}
+
+//La clave existe? si (1) o no (0)
+int btree_contiene(BTreeNode *raiz, int k) {
+    return btree_buscar(raiz, k, NULL, NULL);
+}
+
+//Función para liberar la memoria
+void liberarArbol(BTreeNode *x) {
+    int i;
+    if (x == NULL) return;
+    //Si no es una hoja, primero liberamos a todos sus hijos
+    if (!x->esHoja) {
+        for (i = 0; i <= x->n; i++) {
+            liberarArbol(x->hijo[i]);
+        }
+    }
+    //Liberamos la memoria del nodo actual
+    free(x);
+}
+//Armamos el árbol
+BTreeNode *construirArbolEjemplo(void) {
+    //Creamos los nodos
+    BTreeNode *raiz  = crearNodo(0); //Nodo interno (raíz)
+    BTreeNode *hijo0 = crearNodo(1); //Hojas
+    BTreeNode *hijo1 = crearNodo(1);
+    BTreeNode *hijo2 = crearNodo(1);
+    //Rellenamos la Raíz
+    raiz->n = 2;
+    raiz->clave[0] = 30;
+    raiz->clave[1] = 60;
+    raiz->ref[0] = 100;
+    raiz->ref[1] = 200;
+    //Asignamos los hijos a la raíz
+    raiz->hijo[0] = hijo0;
+    raiz->hijo[1] = hijo1;
+    raiz->hijo[2] = hijo2;
+    //Rellenamos Hijo 0
+    hijo0->n = 2;
+    hijo0->clave[0] = 10;
+    hijo0->clave[1] = 20;
+    hijo0->ref[0] = 10;
+    hijo0->ref[1] = 20;
+    //Rellenamos Hijo 1
+    hijo1->n = 2;
+    hijo1->clave[0] = 40;
+    hijo1->clave[1] = 50;
+    hijo1->ref[0] = 40;
+    hijo1->ref[1] = 50;
+    // Rellenamos Hijo 2
+    hijo2->n = 3;
+    hijo2->clave[0] = 70;
+    hijo2->clave[1] = 80;
+    hijo2->clave[2] = 90;
+    hijo2->ref[0] = 70;
+    hijo2->ref[1] = 80;
+    hijo2->ref[2] = 90;
+    return raiz;
+}
+//----------- MAIN -----------------------
+int main(void) {
+    BTreeNode *raiz;
+    BTreeNode *nodoEncontrado;
+    int pos;
+    int claveBuscada;
+    //Creamos el árbol
+    raiz = construirArbolEjemplo();
+    printf(" ------- PRUEBA DE BÚSQUEDA EN B-ARBOL ------- \n\n");
+    while (1) {
+        printf("Ingresa una clave a buscar (0 para salir): ");
+        if (scanf("%d", &claveBuscada) != 1) {
+            printf("Entrada invalida\n");
+            //Limpiamos el buffer para que no entre en bucle infinito si se pone algo que no es un número
+            while (getchar() != '\n');
+            continue;
+        }
+        if (claveBuscada == 0) {
+            break; //Salir del programa.
+        }
+        //Llamamos a la función de búsqueda
+        if (btree_buscar(raiz, claveBuscada, &nodoEncontrado, &pos)) {
+            printf(" -> ¡Clave %d encontrada!\n", claveBuscada);
+            printf("    Esta en la posicion %d del nodo, su referencia es %ld\n\n",
+                   pos, nodoEncontrado->ref[pos]);
+        } else {
+            printf(" -> Clave %d NO se encuentra en el B-arbol\n\n", claveBuscada);
+        }
+    }
+    //Liberamos la memoria
+    liberarArbol(raiz);
+    return 0;
+}
