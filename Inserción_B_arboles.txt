@@ -1,2 +1,270 @@
 Implementa aquí todos los procesos necesarios para la operación de inserción. 
 Pueden modificar la extensión del documento para que se ajuste al lenguaje de su elección y comentar estas instrucciones.
+---------- CODIGO ----------
+#include <stdio.h>
+#include <stdlib.h>
+//Máximo de claves por nodo
+#define MAX_KEYS    4
+//Mínimo de claves por nodo
+#define T 2 
+//Un hijo más que el número de claves
+#define MAX_CHILDREN (MAX_KEYS+1)
+//Estructura de nodo del B-Árbol
+typedef struct BTreeNode {
+    int n;                             //Número actual de claves en el nodo
+    int clave[MAX_KEYS];               //Claves/datos
+    long ref[MAX_KEYS];                //Referencia asociada a cada clave
+    int esHoja;                        //1 si es nodo hoja, 0 si es interno
+    struct BTreeNode *hijo[MAX_CHILDREN]; //Punteros a los nodos hijos
+} BTreeNode;
+//Crea y prepara un nuevo nodo
+BTreeNode *crearNodo(int esHoja) {
+    int i;
+    //Pide memoria para el nuevo nodo
+    BTreeNode *n = (BTreeNode *) malloc(sizeof(BTreeNode));
+    if (n == NULL) {
+        fprintf(stderr, "Error: Memoria insuficiente\n");
+        exit(1);
+    }
+    n->n = 0;           //Sin claves
+    n->esHoja = esHoja;
+    //Inicializa claves, referencias e hijos
+    for (i = 0; i < MAX_KEYS; i++) {
+        n->clave[i] = 0;
+        n->ref[i] = -1;
+    }
+    for (i = 0; i < MAX_CHILDREN; i++) {
+        n->hijo[i] = NULL;
+    }
+    return n;
+}
+//Busca la clave k desde el nodo x
+//Devuelve 1 si la encuentra, 0 si no
+int btree_buscar(BTreeNode *x, int k, BTreeNode **outNodo, int *outPos) {
+    int i;
+    if (x == NULL) {
+        return 0; //Nodo vacio
+    }
+    //Busca la posición i en este nodo donde clave[i] >= 'k'
+    i = 0;
+    while (i < x->n && k > x->clave[i]) {
+        i++;
+    }
+    //Se encontró
+    if (i < x->n && k == x->clave[i]) {
+        if (outNodo != NULL) *outNodo = x; //Guarda el nodo
+        if (outPos != NULL) *outPos = i;   //Guarda la posición
+        return 1;
+    }
+    //No se encontró
+    if (x->esHoja) {
+        return 0;
+    }
+    //Continúa la búsqueda en el hijo[i]
+    return btree_buscar(x->hijo[i], k, outNodo, outPos);
+}
+//Verifica si la clave existe (1) o no (0)
+int btree_contiene(BTreeNode *raiz, int k) {
+    return btree_buscar(raiz, k, NULL, NULL);
+}
+//Divide un nodo hijo 'y' lleno (con MAX_KEYS) del nodo padre 'x'
+void btree_dividirHijo(BTreeNode *x, int i, BTreeNode *y) {
+    //Crea el nuevo nodo 'z' (hermano derecho de 'y')
+    BTreeNode *z = crearNodo(y->esHoja);
+    //El nodo 'z' toma las claves de la mitad superior de 'y'
+    z->n = T - 1; 
+    //Copia las claves y referencias de la mitad superior de 'y' a 'z'
+    for (int j = 0; j < T - 1; j++) {
+        z->clave[j] = y->clave[j + T];
+        z->ref[j] = y->ref[j + T];
+    }
+    //Si 'y' no es una hoja, 'z' hereda los hijos de la mitad superior de 'y'
+    if (!y->esHoja) {
+        for (int j = 0; j < T; j++) {
+            z->hijo[j] = y->hijo[j + T];
+            y->hijo[j + T] = NULL; 
+        }
+    }
+    //Reduce el número de claves de 'y'
+    y->n = T - 1; 
+    //Mueve los punteros a hijos del padre 'x' para hacer espacio a 'z'
+    for (int j = x->n; j >= i + 1; j--) {
+        x->hijo[j + 1] = x->hijo[j];
+    }
+    //Asigna 'z' como el nuevo hijo derecho en la posición i+1
+    x->hijo[i + 1] = z;
+    //Mueve las claves del padre 'x' para hacer espacio a la clave mediana
+    for (int j = x->n - 1; j >= i; j--) {
+        x->clave[j + 1] = x->clave[j];
+        x->ref[j + 1] = x->ref[j];
+    }
+    //Sube la clave mediana de 'y' a 'x'
+    x->clave[i] = y->clave[T - 1];
+    x->ref[i] = y->ref[T - 1];
+    //Incrementa el contador de claves en el padre 'x'
+    x->n = x->n + 1;
+}
+
+//Inserta una clave en el nodo 'x', asumiendo que 'x' no está lleno
+void btree_insertarNoLleno(BTreeNode *x, int k, long r) {
+    int i = x->n - 1; // Empieza por el final
+
+    //Si 'x' es una hoja, inserta directamente
+    if (x->esHoja) {
+        //Mueve las claves mayores que 'k' una posición a la derecha
+        while (i >= 0 && k < x->clave[i]) {
+            x->clave[i + 1] = x->clave[i];
+            x->ref[i + 1] = x->ref[i];
+            i--;
+        }
+        //Inserta la nueva clave en la posición encontrada
+        x->clave[i + 1] = k;
+        x->ref[i + 1] = r;
+        x->n = x->n + 1;
+    } 
+    //Si 'x' no es una hoja, busca el hijo correcto
+    else {
+        //Encuentra el hijo al que descender (donde k < clave[i])
+        while (i >= 0 && k < x->clave[i]) {
+            i--;
+        }
+        i++; //i es el índice del hijo a visitar (hijo[i])
+
+        //Si el hijo está lleno, se divide
+        if (x->hijo[i]->n == MAX_KEYS) {
+            btree_dividirHijo(x, i, x->hijo[i]);
+
+            //Compara 'k' con la clave que subió para descender al hijo correcto
+            if (k > x->clave[i]) {
+                i++;
+            }
+        }
+        //Llama recursivamente para insertar en el subárbol no lleno
+        btree_insertarNoLleno(x->hijo[i], k, r);
+    }
+}
+
+//Inserta una clave en el B-Árbol, actualizando la raíz si es necesario
+void btree_insertar(BTreeNode **raiz, int k, long r) {
+    //Si el árbol está vacío, crea la raíz
+    if (*raiz == NULL) {
+        *raiz = crearNodo(1); //Es hoja
+        (*raiz)->clave[0] = k;
+        (*raiz)->ref[0] = r;
+        (*raiz)->n = 1;
+        printf("Clave %d insertada (nueva raíz).\n", k);
+        return;
+    }
+    BTreeNode *r_actual = *raiz;
+    //Si la raíz está llena, el árbol crece en altura
+    if (r_actual->n == MAX_KEYS) {
+        //Crea una nueva raíz 's'
+        BTreeNode *s = crearNodo(0); //No es hoja
+        s->hijo[0] = r_actual;
+        //Divide la raíz antigua (ahora hijo[0] de 's')
+        btree_dividirHijo(s, 0, r_actual);
+        //'s' se convierte en la nueva raíz del árbol
+        *raiz = s; 
+        //Llama a insertarNoLleno en la nueva raíz 's'
+        btree_insertarNoLleno(s, k, r);
+    } 
+    //Si la raíz no está llena, inserta normalmente
+    else {
+        btree_insertarNoLleno(r_actual, k, r);
+    }
+    printf("Clave %d insertada.\n", k);
+}
+//Función para liberar toda la memoria del árbol
+void liberarArbol(BTreeNode *x) {
+    int i;
+    if (x == NULL) return;
+    //Libera hijos si no es hoja
+    if (!x->esHoja) {
+        for (i = 0; i <= x->n; i++) {
+            liberarArbol(x->hijo[i]);
+        }
+    }
+    //Libera el nodo actual
+    free(x);
+}
+//Función para imprimir el contenido de un nodo
+void imprimirNodo(BTreeNode *x) {
+    if (x == NULL) {
+        printf("[NULO]");
+        return;
+    }
+    printf("[");
+    for (int i = 0; i < x->n; i++) {
+        printf("%d", x->clave[i]);
+        if (i < x->n - 1) {
+            printf(", ");
+        }
+    }
+    printf("]");
+}
+//Función para imprimir el árbol
+void imprimirArbol(BTreeNode *x, int nivel) {
+    if (x == NULL) return;
+
+    for (int i = 0; i < nivel; i++) printf("  ");
+    printf("Nivel %d (n=%d, Hoja=%d): ", nivel, x->n, x->esHoja);
+    imprimirNodo(x);
+    printf("\n");
+
+    if (!x->esHoja) {
+        for (int i = 0; i <= x->n; i++) {
+            imprimirArbol(x->hijo[i], nivel + 1);
+        }
+    }
+}
+//----------- MAIN -----------------------
+int main(void) {
+    BTreeNode *raiz = NULL; //Empezamos con un árbol vacío
+    int clave;
+    int opcion;
+
+    printf("----- B-ARBOL (Orden %d) -----\n\n", MAX_KEYS + 1);
+    while (1) {
+        printf("Menu:\n");
+        printf("1. Insertar Clave\n");
+        printf("2. Imprimir Arbol\n");
+        printf("0. Salir\n");
+        printf("Selecciona una opcion: ");
+        if (scanf("%d", &opcion) != 1) {
+            printf("\nOpcion invalida\n");
+            while (getchar() != '\n');
+            continue;
+        }
+        if (opcion == 0) {
+            break; //Salir del programa
+        }
+        switch (opcion) {
+            case 1:
+                printf("Ingresa la clave a insertar: ");
+                if (scanf("%d", &clave) == 1) {
+                    //Usamos la clave como su propia referencia
+                    btree_insertar(&raiz, clave, (long)clave);
+                } else {
+                    printf("Entrada invalida\n");
+                }
+                break;
+            case 2: //Ahora manejamos Imprimir Arbol
+                printf("\n--- ESTRUCTURA DEL B-ARBOL ---\n");
+                if (raiz == NULL) {
+                    printf("El arbol esta vacio\n");
+                } else {
+                    imprimirArbol(raiz, 0);
+                }
+                printf("------------------------------\n\n");
+                break;
+            default:
+                printf("\nOpcion no reconocida\n");
+                break;
+        }
+        //Limpiamos el buffer de entrada para evitar bucles infinitos por entradas inválidas
+        while (getchar() != '\n');
+    }
+    //Liberamos memoria
+    liberarArbol(raiz);
+    return 0;
+}
